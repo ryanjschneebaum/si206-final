@@ -55,9 +55,9 @@ def retrieve_categories(html_file):
         if(categories[index] in using_list):
             used_list.append(categories[index])
             which_type = "UNDEF"
-            if(re.findall('Album', categories[index]) or re.findall('Soundtrack', categories[index])): which_type = "Album"
-            elif(re.findall('Artist', categories[index])): which_type = "Artist"
-            elif(re.findall('Record', categories[index]) or re.findall('Song', categories[index]) or re.findall('Instrumental', categories[index])): which_type = "Song"
+            if(re.findall('Album', categories[index]) or re.findall('Soundtrack', categories[index])): which_type = "album"
+            elif(re.findall('Artist', categories[index])): which_type = "artist"
+            elif(re.findall('Record', categories[index]) or re.findall('Song', categories[index]) or re.findall('Instrumental', categories[index])): which_type = "track"
             blocks[categories[index]] = { "search_type": which_type, "winner": winners[index], "nominees": nominees[index] }
     # print("IN OUR LIST BUT NOT FOUND")
     # for cat in using_list:
@@ -72,37 +72,71 @@ def set_token(filename):
         # print(token_json['access_token'])
         return token_json['access_token']
 
+
+def search(category_data, token, name, type):
+    # if type == "track":
+    url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
+    response = requests.get(url, 
+                            headers={'Authorization': f'Bearer {token}'})
+    # print(response)
+    if response.status_code != 200:
+        category_data_dict = {"name": name,
+                            "id": "None"}
+        category_data['winner'] = category_data_dict
+    else:
+        response_dict = json.loads(response.text)
+        category_data_dict = {"name": name,
+                            "id": response_dict[f"{type}s"]["items"][0]["id"]}
+        category_data['winner'] = category_data_dict
+        # break
+    for i in range(0, len(category_data['nominees'])):
+        name = category_data['nominees'][i]
+        url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
+        response = requests.get(url, 
+                                headers={'Authorization': f'Bearer {token}'})
+        response_dict = json.loads(response.text)
+        # print(response_dict)
+        category_data_dict = {"name": name,
+                            "id": response_dict[f"{type}s"]["items"][0]["id"]}
+        # print(category_data_dict)
+        category_data['nominees'][i] = category_data_dict
+    # elif type == "artist":
+    #     pass
+    # elif type == "album":
+    #     pass
+
 def find_ids(data, token):
     ""
     for category, category_data in data.items():
         name = category_data["winner"]
-        type = 'track'
-        url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
-        response = requests.get(url, 
-                                headers={'Authorization': f'Bearer {token}'})
-        # print(response)
-        if response.status_code != 200:
-            category_data_dict = {"name": name,
-                                "id": "None"}
-            category_data['winner'] = category_data_dict
-        else:
-            response_dict = json.loads(response.text)
-            category_data_dict = {"name": name,
-                                "id": response_dict["tracks"]["items"][0]["id"]}
-            category_data['winner'] = category_data_dict
-            # break
-        for nominee in category_data['nominees']:
-            name = nominee
-            type = 'track'
-            url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
-            response = requests.get(url, 
-                                    headers={'Authorization': f'Bearer {token}'})
-            response_dict = json.loads(response.text)
-            # print(response_dict)
-            category_data_dict = {"name": name,
-                                "id": response_dict["tracks"]["items"][0]["id"]}
-            print(category_data_dict)
-            nominee = category_data_dict
+        type = category_data["search_type"]
+        search(category_data, token, name, type)
+        # url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
+        # response = requests.get(url, 
+        #                         headers={'Authorization': f'Bearer {token}'})
+        # # print(response)
+        # if response.status_code != 200:
+        #     category_data_dict = {"name": name,
+        #                         "id": "None"}
+        #     category_data['winner'] = category_data_dict
+        # else:
+        #     response_dict = json.loads(response.text)
+        #     category_data_dict = {"name": name,
+        #                         "id": response_dict["tracks"]["items"][0]["id"]}
+        #     category_data['winner'] = category_data_dict
+        #     # break
+        # for nominee in category_data['nominees']:
+        #     name = nominee
+        #     type = 'track'
+        #     url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
+        #     response = requests.get(url, 
+        #                             headers={'Authorization': f'Bearer {token}'})
+        #     response_dict = json.loads(response.text)
+        #     # print(response_dict)
+        #     category_data_dict = {"name": name,
+        #                         "id": response_dict["tracks"]["items"][0]["id"]}
+        #     print(category_data_dict)
+        #     nominee = category_data_dict
         
     
     # winner = data["Record Of The Year"]["winner"]
@@ -132,10 +166,11 @@ def main():
     #     print("\t\t", data[datum]["winner"])
     #     print("\tNominees:")
     #     for nom in data[datum]["nominees"]: print("\t\t", nom)
-    print(data)
-    token = set_token("access_token.txt")
-    # find_ids(data, token)
     # print(data)
+    token = set_token("access_token.txt")
+    find_ids(data, token)
+    with open('data.json', 'w') as file:
+        json.dump(data, file)
     # query_api()
 
 main()
