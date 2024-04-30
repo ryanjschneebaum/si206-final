@@ -2,6 +2,8 @@ from bs4 import BeautifulSoup
 import re
 import os
 import csv
+import requests
+import json
 import unittest
 
 def retrieve_categories(html_file): 
@@ -44,13 +46,77 @@ def retrieve_categories(html_file):
     
     return blocks
 
+
+def set_token(filename):
+    with open(filename, 'r', encoding='utf-8') as file:
+        token_json = json.loads(file.read())
+        # print(token_json['access_token'])
+        return token_json['access_token']
+
+def find_ids(data, token):
+    ""
+    for category, category_data in data.items():
+        name = category_data["winner"]
+        type = 'track'
+        url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
+        response = requests.get(url, 
+                                headers={'Authorization': f'Bearer {token}'})
+        # print(response)
+        if response.status_code != 200:
+            category_data_dict = {"name": name,
+                                "id": "None"}
+            category_data['winner'] = category_data_dict
+        else:
+            response_dict = json.loads(response.text)
+            category_data_dict = {"name": name,
+                                "id": response_dict["tracks"]["items"][0]["id"]}
+            category_data['winner'] = category_data_dict
+            # break
+        for nominee in category_data['nominees']:
+            name = nominee
+            type = 'track'
+            url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
+            response = requests.get(url, 
+                                    headers={'Authorization': f'Bearer {token}'})
+            response_dict = json.loads(response.text)
+            # print(response_dict)
+            category_data_dict = {"name": name,
+                                "id": response_dict["tracks"]["items"][0]["id"]}
+            print(category_data_dict)
+            nominee = category_data_dict
+        
+    
+    # winner = data["Record Of The Year"]["winner"]
+    # type = 'album'
+    # url = f'https://api.spotify.com/v1/search?q={winner}&type={type}&limit=1'
+    # print(response.text)
+
+
+def query_api(data, token):
+    ""
+    response = requests.post('https://api.spotify.com/v1/albums', 
+                            headers={'Authorization': f'Bearer {token}'})
+    print(response)
+    data = response.text
+    # in_dict = json.loads(data)
+    # print(in_dict.get("facts"))
+    
+
+    pass
+
 def main():
     data = retrieve_categories("grammys.html")
-    for datum in data:
-        print(datum)
-        print("\tWinner:")
-        print("\t\t", data[datum]["winner"])
-        print("\tNominees:")
-        for nom in data[datum]["nominees"]: print("\t\t", nom)
+    # print(data)
+    # for datum in data:
+    #     print(datum)
+    #     print("\tWinner:")
+    #     print("\t\t", data[datum]["winner"])
+    #     print("\tNominees:")
+    #     for nom in data[datum]["nominees"]: print("\t\t", nom)
+    print(data)
+    token = set_token("access_token.txt")
+    # find_ids(data, token)
+    # print(data)
+    # query_api()
 
 main()
