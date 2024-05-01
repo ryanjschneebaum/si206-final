@@ -213,8 +213,29 @@ def make_charts():
     conn = sqlite3.connect("grammys.sqlite3")
     cur = conn.cursor()
     cur.execute("SELECT category, Categories.name, spotify_id, popularity FROM Categories INNER JOIN Tracks ON Categories.spotify_id = Tracks.id")
+    track_data = {}
     for row in cur:
-        print(row)
+        print("row:", row)
+        if(row[0] not in track_data): # if winner
+            #print(row[0], "not in track_data ; new track =", row[1])
+            track_data[row[0]] = { "winner": row[1], "winner_popularity": row[3], "nominees": [], "nominee_popularity": [] }
+        else: # if nominee
+            #print(row[0], "in track_data ; new track =", row[1])
+            track_data[row[0]]["nominees"].append(row[1])
+            track_data[row[0]]["nominee_popularity"].append(row[3])
+        # print("Category Data: ")
+        # print(track_data[row[0]])
+    # print(track_data["Record Of The Year"])
+    # print()
+    # print(track_data["Song Of The Year"])
+    # print()
+
+    # for cat in track_data:
+    #     print(cat)
+    #     print("\tWinner:")
+    #     print("\t\t", track_data[cat]["winner"])
+    #     print("\tNominees:")
+    #     for nom in track_data[cat]["nominees"]: print("\t\t", nom)
 
     popularity_data = calculate_popularity(data)
 
