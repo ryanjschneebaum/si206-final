@@ -4,6 +4,7 @@ import os
 import csv
 import requests
 import json
+import sqlite3
 import unittest
 
 def retrieve_categories(html_file): 
@@ -66,6 +67,18 @@ def retrieve_categories(html_file):
     return blocks
 
 
+def create_database(database_name, data):
+    conn = sqlite3.connect(database_name)
+    cur = conn.cursor()
+    cur.execute('DROP TABLE IF EXISTS Categories')
+    cur.execute('CREATE TABLE Categories (category TEXT, name TEXT, spotify_id TEXT)')
+    cur.execute('DROP TABLE IF EXISTS Tracks')
+    cur.execute('CREATE TABLE Tracks (id TEXT UNIQUE, name TEXT, popularity INTEGER)')
+    cur.execute('DROP TABLE IF EXISTS Albums')
+    cur.execute('CREATE TABLE Albums (id TEXT UNIQUE, name TEXT, popularity INTEGER)')
+    conn.commit()
+    conn.close()
+
 def set_token(filename):
     with open(filename, 'r', encoding='utf-8') as file:
         token_json = json.loads(file.read())
@@ -103,13 +116,46 @@ def search(category_data, token, name, type):
         nominee_ids.append(response_dict[f"{type}s"]["items"][0]["id"])
     category_data["nominee_ids"] = nominee_ids
 
+
 def find_ids(data, token):
-    ""
+    """"""
+    conn = sqlite3.connect("grammys.sqlite3")
+    cur = conn.cursor()
     for category, category_data in data.items():
         name = category_data["winner"]
         type = category_data["search_type"]
         search(category_data, token, name, type)
+        # cur.execute('INSERT INTO Categories (name, spotify_id) VALUES (?, ?)', (name, category_data["winner_id"]))
+        for index in range(0, len(category_data["nominees"])):
+            name = category_data["nominees"][index]
+            id = category_data["nominee_ids"][index]
+            # cur.execute('INSERT INTO Categories (name, spotify_id) VALUES (?, ?)', (name, id))
 
+
+def database(data):
+    conn = sqlite3.connect("grammys.sqlite3")
+    cur = conn.cursor()
+    for category, category_data in data.items():
+        name = category_data["winner"]
+        cur.execute('INSERT INTO Categories (category, name, spotify_id) VALUES (?, ?, ?)', (category, name, category_data["winner_id"]))
+        for index in range(0, len(category_data["nominees"])):
+            name = category_data["nominees"][index]
+            id = category_data["nominee_ids"][index]
+            cur.execute('INSERT INTO Categories (category, name, spotify_id) VALUES (?, ?, ?)', (category, name, id))
+    conn.commit()
+    conn.close()
+
+
+def insert_data(type, id, name, popularity):
+    print(id, name, popularity)
+    conn = sqlite3.connect("grammys.sqlite3")
+    cur = conn.cursor()
+    if type == "track":
+        cur.execute('INSERT OR IGNORE INTO Tracks (id, name, popularity) VALUES (?, ?, ?)', (id, name, popularity))
+    elif type == "album":
+        cur.execute('INSERT OR IGNORE INTO Albums (id, name, popularity) VALUES (?, ?, ?)', (id, name, popularity))
+    conn.commit()
+    conn.close()
 
 def query_api(data, token, type, ids):
     ""
@@ -120,9 +166,11 @@ def query_api(data, token, type, ids):
         if response.status_code != 200:
             print("error")
         else:
+            print(ids)
             response_dict = json.loads(response.text)
             # print(response_dict)
             data["winner_popularity"] = response_dict[f"{type}s"][0]["popularity"]
+            insert_data(type, ids, data["winner_id"], data["winner_popularity"])
     else:
         url = f"https://api.spotify.com/v1/{type}s?ids={','.join(str(x) for x in ids)}"
         response = requests.get(url, 
@@ -134,7 +182,9 @@ def query_api(data, token, type, ids):
             # print(response_dict)
             data["nominee_popularity"] = []
             for i in range(0, len(response_dict[f"{type}s"])):
-                data["nominee_popularity"].append(response_dict[f"{type}s"][i]["popularity"])
+                popularity = response_dict[f"{type}s"][i]["popularity"]
+                data["nominee_popularity"].append(popularity)
+                insert_data(type, data["nominee_ids"][i], data["nominees"][i], popularity)
             print(data)
     
 
@@ -149,7 +199,10 @@ def calculate_popularity(data):
         for nominee_popularity in data[category]["nominee_popularity"]:
             nominees.append(nominee_popularity / total_popularity)
         popularity_data[category] = {"winner_score": data[category]["winner_popularity"] / total_popularity,
-                                     "nominee_scores": nominees}
+                                     "winner_genres": data[category]["winner_genres"],
+                                     "nominee_scores": nominees, 
+                                     "nominee_genres": data[category]["winner_genres"]
+                                    }
     return popularity_data
 
 
@@ -164,25 +217,42 @@ def main():
     #     for nom in data[datum]["nominees"]: print("\t\t", nom)
     # print(data)
     token = set_token("access_token.txt")
+    # create_database("grammys.sqlite3", data)
     # find_ids(data, token)
     # with open('data.json', 'w') as file:
     #     json.dump(data, file)
-    # with open('data/data.json', 'r') as file:
-    #     # print(file.read())
-    #     data = json.load(file)
-    #     # print(data)
-    # for category, category_dict in data.items():
-    #     print(category)
-    #     query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
-    #     query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
+    with open('data/data.json', 'r') as file:
+        # print(file.read())
+        data = json.load(file)
+        database(data)
+        # print(data)
+    # conn = sqlite3.connect("grammys.sqlite3")
+    # cur = conn.cursor()
+    # cur.execute('SELECT * FROM Categories')
+    # for row in cur:
+    #     print(row)
+    for category, category_dict in data.items():
+        print(category)
+        query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
+        query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
+    
+    conn = sqlite3.connect("grammys.sqlite3")
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM Tracks')
+    for row in cur:
+        print(row)
+    cur.execute('SELECT * FROM Albums')
+    for row in cur:
+        print(row)
     # with open('popularity_data.json', 'w') as file:
     #     json.dump(data, file)
 
+
     # Calculate relative popularity 
-    with open('data/popularity_data.json', 'r') as file:
-        # print(file.read())
-        data = json.load(file)
-    popularity_data = calculate_popularity(data)
-    print(popularity_data)
+    # with open('data/popularity_data.json', 'r') as file:
+    #     # print(file.read())
+    #     data = json.load(file)
+    # popularity_data = calculate_popularity(data)
+    # print(popularity_data)
 
 main()
