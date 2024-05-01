@@ -118,7 +118,7 @@ def query_api(data, token, type, ids):
         response = requests.get(url, 
                                 headers={'Authorization': f'Bearer {token}'})
         if response.status_code != 200:
-                print("error")
+            print("error")
         else:
             response_dict = json.loads(response.text)
             # print(response_dict)
@@ -138,6 +138,21 @@ def query_api(data, token, type, ids):
             print(data)
     
 
+def calculate_popularity(data):
+    """Calculate relative popularity"""
+    popularity_data = {}
+    for category, category_dict in data.items():
+        total_popularity = data[category]["winner_popularity"]
+        for nominee_popularity in data[category]["nominee_popularity"]:
+            total_popularity += nominee_popularity
+        nominees = []
+        for nominee_popularity in data[category]["nominee_popularity"]:
+            nominees.append(nominee_popularity / total_popularity)
+        popularity_data[category] = {"winner_score": data[category]["winner_popularity"] / total_popularity,
+                                     "nominee_scores": nominees}
+    return popularity_data
+
+
 def main():
     data = retrieve_categories("grammys.html")
     # print(data)
@@ -152,15 +167,22 @@ def main():
     # find_ids(data, token)
     # with open('data.json', 'w') as file:
     #     json.dump(data, file)
-    with open('data/data.json', 'r') as file:
+    # with open('data/data.json', 'r') as file:
+    #     # print(file.read())
+    #     data = json.load(file)
+    #     # print(data)
+    # for category, category_dict in data.items():
+    #     print(category)
+    #     query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
+    #     query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
+    # with open('popularity_data.json', 'w') as file:
+    #     json.dump(data, file)
+
+    # Calculate relative popularity 
+    with open('data/popularity_data.json', 'r') as file:
         # print(file.read())
         data = json.load(file)
-        # print(data)
-    for category, category_dict in data.items():
-        print(category)
-        query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
-        query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
-    with open('popularity_data.json', 'w') as file:
-        json.dump(data, file)
+    popularity_data = calculate_popularity(data)
+    print(popularity_data)
 
 main()
