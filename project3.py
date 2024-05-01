@@ -116,11 +116,14 @@ def search(category_data, token, name, type):
         nominee_ids.append(response_dict[f"{type}s"]["items"][0]["id"])
     category_data["nominee_ids"] = nominee_ids
 
-def find_ids(data, token):
+def find_ids(data, token, max_ind):
     """"""
     # conn = sqlite3.connect("grammys.sqlite3")
     # cur = conn.cursor()
+    ind = 0
     for category, category_data in data.items():
+        if ind >= max_ind:
+            break
         name = category_data["winner"]
         type = category_data["search_type"]
         search(category_data, token, name, type)
@@ -129,18 +132,23 @@ def find_ids(data, token):
             name = category_data["nominees"][index]
             id = category_data["nominee_ids"][index]
             # cur.execute('INSERT INTO Categories (name, spotify_id) VALUES (?, ?)', (name, id))
+        ind += 1
 
 
-def make_database_categories(data, filename):
+def make_database_categories(data, filename, max_ind):
     conn = sqlite3.connect(filename)
     cur = conn.cursor()
+    ind = 0
     for category, category_data in data.items():
+        if ind >= max_ind:
+            break
         name = category_data["winner"]
         cur.execute('INSERT INTO Categories (category, name, spotify_id, is_winner) VALUES (?, ?, ?, ?)', (category, name, category_data["winner_id"], True))
         for index in range(0, len(category_data["nominees"])):
             name = category_data["nominees"][index]
             id = category_data["nominee_ids"][index]
             cur.execute('INSERT INTO Categories (category, name, spotify_id, is_winner) VALUES (?, ?, ?, ?)', (category, name, id, False))
+        ind += max_ind
     conn.commit()
     conn.close()
 
@@ -169,7 +177,7 @@ def query_api(data, token, type, ids, filename):
             response_dict = json.loads(response.text)
             # print(response_dict)
             data["winner_popularity"] = response_dict[f"{type}s"][0]["popularity"]
-            insert_data(type, ids, data["winner_id"], data["winner_popularity"], filename)
+            insert_data(type, ids, data["winner"], data["winner_popularity"], filename)
     else:
         url = f"https://api.spotify.com/v1/{type}s?ids={','.join(str(x) for x in ids)}"
         response = requests.get(url, 
@@ -190,8 +198,8 @@ def meta_database_stuff(filename, index):
     data = retrieve_categories("grammys.html")
     token = set_token("access_token.txt")
     create_database(filename)
-    find_ids(data, token)
-    make_database_categories(data, filename)
+    find_ids(data, token, 25)
+    make_database_categories(data, filename, 25)
     ind = 0
     for category, category_dict in data.items():
         if ind == index:
@@ -380,7 +388,7 @@ def main():
     # make_charts()
 
     # make_database_categories()
-    meta_database_stuff("grammys2.sqlite3", 20)
+    meta_database_stuff("grammys3.sqlite3", 20)
 
 
 main()
