@@ -68,11 +68,11 @@ def retrieve_categories(html_file):
     return blocks
 
 
-def create_database(database_name, data):
+def create_database(database_name):
     conn = sqlite3.connect(database_name)
     cur = conn.cursor()
     cur.execute('DROP TABLE IF EXISTS Categories')
-    cur.execute('CREATE TABLE Categories (category TEXT, name TEXT, spotify_id TEXT)')
+    cur.execute('CREATE TABLE Categories (category TEXT, name TEXT, spotify_id TEXT, is_winner BOOLEAN)')
     cur.execute('DROP TABLE IF EXISTS Tracks')
     cur.execute('CREATE TABLE Tracks (id TEXT UNIQUE, name TEXT, popularity INTEGER)')
     cur.execute('DROP TABLE IF EXISTS Albums')
@@ -133,16 +133,16 @@ def find_ids(data, token):
             # cur.execute('INSERT INTO Categories (name, spotify_id) VALUES (?, ?)', (name, id))
 
 
-def database(data):
+def make_database_categories(data):
     conn = sqlite3.connect("grammys.sqlite3")
     cur = conn.cursor()
     for category, category_data in data.items():
         name = category_data["winner"]
-        cur.execute('INSERT INTO Categories (category, name, spotify_id) VALUES (?, ?, ?)', (category, name, category_data["winner_id"]))
+        cur.execute('INSERT INTO Categories (category, name, spotify_id, is_winner) VALUES (?, ?, ?, ?)', (category, name, category_data["winner_id"], True))
         for index in range(0, len(category_data["nominees"])):
             name = category_data["nominees"][index]
             id = category_data["nominee_ids"][index]
-            cur.execute('INSERT INTO Categories (category, name, spotify_id) VALUES (?, ?, ?)', (category, name, id))
+            cur.execute('INSERT INTO Categories (category, name, spotify_id, is_winner) VALUES (?, ?, ?, ?)', (category, name, id, False))
     conn.commit()
     conn.close()
 
@@ -215,6 +215,8 @@ def make_charts():
     cur.execute("SELECT category, Categories.name, spotify_id, popularity FROM Categories INNER JOIN Tracks ON Categories.spotify_id = Tracks.id")
     track_data = {}
     for row in cur:
+        print(row)
+    cur.execute("SELECT category, Categories.name, spotify_id, popularity FROM Categories INNER JOIN Albums ON Categories.spotify_id = Albums.id")
         print("row:", row)
         if(row[0] not in track_data): # if winner
             #print(row[0], "not in track_data ; new track =", row[1])
@@ -317,7 +319,7 @@ def pie_chart(data):
     plt.show()
 
 def main():
-    # data = retrieve_categories("grammys.html")
+    data = retrieve_categories("grammys.html")
     # # print(data)
     # # for datum in data:
     # #     print(datum)
@@ -326,20 +328,25 @@ def main():
     # #     print("\tNominees:")
     # #     for nom in data[datum]["nominees"]: print("\t\t", nom)
     # # print(data)
-    # token = set_token("access_token.txt")
-    # # find_ids(data, token)
-    # # with open('data.json', 'w') as file:
-    # #     json.dump(data, file)
-    # # with open('data/data.json', 'r') as file:
-    # #     # print(file.read())
-    # #     data = json.load(file)
-    # #     # print(data)
-    # # for category, category_dict in data.items():
-    # #     print(category)
-    # #     query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
-    # #     query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
-    # # with open('popularity_data.json', 'w') as file:
-    # #     json.dump(data, file)
+    token = set_token("access_token.txt")
+
+    # Search for IDs
+    # create_database("grammys.sqlite3")
+    # find_ids(data, token)
+    # make_database_categories(data)
+    # with open('data.json', 'w') as file:
+    #     json.dump(data, file)
+
+    with open('data/data.json', 'r') as file:
+        # print(file.read())
+        data = json.load(file)
+        # print(data)
+    for category, category_dict in data.items():
+        print(category)
+        query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
+        query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
+    with open('popularity_data.json', 'w') as file:
+        json.dump(data, file)
 
     # # Calculate relative popularity 
     # with open('data/popularity_data.json', 'r') as file:
@@ -347,7 +354,7 @@ def main():
     #     data = json.load(file)
     # popularity_data = calculate_popularity(data)
     # print(popularity_data)
-    make_charts()
+    # make_charts()
 
 
 main()
