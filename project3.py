@@ -80,30 +80,28 @@ def search(category_data, token, name, type):
                             headers={'Authorization': f'Bearer {token}'})
     # print(response)
     if response.status_code != 200:
-        category_data_dict = {"name": name,
-                            "id": "None"}
-        category_data['winner'] = category_data_dict
+        # category_data_dict = {"name": name,
+        #                     "id": "None"}
+        category_data['winner_id'] = "None"
     else:
         response_dict = json.loads(response.text)
-        category_data_dict = {"name": name,
-                            "id": response_dict[f"{type}s"]["items"][0]["id"]}
-        category_data['winner'] = category_data_dict
+        # category_data_dict = {"name": name,
+        #                     "id": response_dict[f"{type}s"]["items"][0]["id"]}
+        # category_data['winner'] = category_data_dict
+        category_data["winner_id"] = response_dict[f"{type}s"]["items"][0]["id"]
         # break
+    nominee_ids = []
     for i in range(0, len(category_data['nominees'])):
         name = category_data['nominees'][i]
         url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
         response = requests.get(url, 
                                 headers={'Authorization': f'Bearer {token}'})
         response_dict = json.loads(response.text)
-        # print(response_dict)
-        category_data_dict = {"name": name,
-                            "id": response_dict[f"{type}s"]["items"][0]["id"]}
-        # print(category_data_dict)
-        category_data['nominees'][i] = category_data_dict
-    # elif type == "artist":
-    #     pass
-    # elif type == "album":
-    #     pass
+        # category_data_dict = {"name": name,
+        #                     "id": response_dict[f"{type}s"]["items"][0]["id"]}
+        # category_data['nominees'][i] = category_data_dict
+        nominee_ids.append(response_dict[f"{type}s"]["items"][0]["id"])
+    category_data["nominee_ids"] = nominee_ids
 
 def find_ids(data, token):
     ""
@@ -111,51 +109,34 @@ def find_ids(data, token):
         name = category_data["winner"]
         type = category_data["search_type"]
         search(category_data, token, name, type)
-        # url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
-        # response = requests.get(url, 
-        #                         headers={'Authorization': f'Bearer {token}'})
-        # # print(response)
-        # if response.status_code != 200:
-        #     category_data_dict = {"name": name,
-        #                         "id": "None"}
-        #     category_data['winner'] = category_data_dict
-        # else:
-        #     response_dict = json.loads(response.text)
-        #     category_data_dict = {"name": name,
-        #                         "id": response_dict["tracks"]["items"][0]["id"]}
-        #     category_data['winner'] = category_data_dict
-        #     # break
-        # for nominee in category_data['nominees']:
-        #     name = nominee
-        #     type = 'track'
-        #     url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
-        #     response = requests.get(url, 
-        #                             headers={'Authorization': f'Bearer {token}'})
-        #     response_dict = json.loads(response.text)
-        #     # print(response_dict)
-        #     category_data_dict = {"name": name,
-        #                         "id": response_dict["tracks"]["items"][0]["id"]}
-        #     print(category_data_dict)
-        #     nominee = category_data_dict
-        
-    
-    # winner = data["Record Of The Year"]["winner"]
-    # type = 'album'
-    # url = f'https://api.spotify.com/v1/search?q={winner}&type={type}&limit=1'
-    # print(response.text)
 
 
-def query_api(data, token):
+def query_api(data, token, type, ids):
     ""
-    response = requests.post('https://api.spotify.com/v1/albums', 
-                            headers={'Authorization': f'Bearer {token}'})
-    print(response)
-    data = response.text
-    # in_dict = json.loads(data)
-    # print(in_dict.get("facts"))
+    if isinstance(ids, str):
+        url = f"https://api.spotify.com/v1/{type}s?ids={ids}"
+        response = requests.get(url, 
+                                headers={'Authorization': f'Bearer {token}'})
+        if response.status_code != 200:
+                print("error")
+        else:
+            response_dict = json.loads(response.text)
+            # print(response_dict)
+            data["winner_popularity"] = response_dict[f"{type}s"][0]["popularity"]
+    else:
+        url = f"https://api.spotify.com/v1/{type}s?ids={','.join(str(x) for x in ids)}"
+        response = requests.get(url, 
+                                headers={'Authorization': f'Bearer {token}'})
+        if response.status_code != 200:
+            print("error")
+        else:
+            response_dict = json.loads(response.text)
+            # print(response_dict)
+            data["nominee_popularity"] = []
+            for i in range(0, len(response_dict[f"{type}s"])):
+                data["nominee_popularity"].append(response_dict[f"{type}s"][i]["popularity"])
+            print(data)
     
-
-    pass
 
 def main():
     data = retrieve_categories("grammys.html")
@@ -168,9 +149,18 @@ def main():
     #     for nom in data[datum]["nominees"]: print("\t\t", nom)
     # print(data)
     token = set_token("access_token.txt")
-    find_ids(data, token)
-    with open('data.json', 'w') as file:
+    # find_ids(data, token)
+    # with open('data.json', 'w') as file:
+    #     json.dump(data, file)
+    with open('data/data.json', 'r') as file:
+        # print(file.read())
+        data = json.load(file)
+        # print(data)
+    for category, category_dict in data.items():
+        print(category)
+        query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
+        query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
+    with open('popularity_data.json', 'w') as file:
         json.dump(data, file)
-    # query_api()
 
 main()
