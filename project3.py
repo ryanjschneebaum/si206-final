@@ -6,10 +6,12 @@ import requests
 import json
 import sqlite3
 import unittest
+import matplotlib.pyplot as plt
+import numpy as np
 
 def retrieve_categories(html_file): 
 
-    using_list = ["Song Of The Year", "Album Of The Year", "Record Of The Year", "Best New Artist", "Best Pop Vocal Album", "Best Dance/Electronic Recording", "Best Pop Dance Recording", "Best Dance/Electronic Music Album", "Best Rock Song", "Best Rock Album", "Best Alternative Music Album", "Best R&B Song", "Best Progressive R&B Album", "Best R&B Album", "Best Rap Song", "Best Rap Album", "Best Jazz Vocal Album", "Best Jazz Instrumental Album", "Best Large Jazz Ensemble Album", "Best Latin Jazz Album", "Best Alternative Jazz Album", "Best Traditional Pop Vocal Album", "Best Contemporary Instrumental Album", "Best Country Song", "Best Country Album", "Best American Roots Song", "Best Americana Album", "Best Bluegrass Album", "Best Traditional Blues Album", "Best Contemporary Blues Album", "Best Folk Album", "Best Regional Roots Music Album", "Best Gospel Performance/Song", "Best Contemporary Christian Music Performance/Song", "Best Gospel Album", "Best Contemporary Christian Music Album", "Best Roots Gospel Album", "Best Latin Pop Album", "Best Música Urbana Album", "Best Latin Rock or Alternative Album", "Best Música Mexicana Album (Including Tejano)", "Best Tropical Latin Album", "Best Global Music Album", "Best Reggae Album", "Best New Age, Ambient, or Chant Album", "Best Children's Music Album", "Best Comedy Album", "Best Compilation Soundtrack For Visual Media", "Best Score Soundtrack For Visual Media (Includes Film And Television)", "Best Score Soundtrack for Video Games and Other Interactive Media", "Best Song Written For Visual Media", "Best Historical Album", "Best Engineered Album, Non-Classical", "Best Engineered Album, Classical", "Best Remixed Recording", "Best Immersive Audio Album", "Best Instrumental Composition", "Best Opera Recording", "Best Classical Instrumental Solo", "Best Classical Solo Vocal Album"]
+    using_list = ["Song Of The Year", "Album Of The Year", "Record Of The Year", "Best Pop Vocal Album", "Best Dance/Electronic Recording", "Best Pop Dance Recording", "Best Dance/Electronic Music Album", "Best Rock Song", "Best Rock Album", "Best Alternative Music Album", "Best R&B Song", "Best Progressive R&B Album", "Best R&B Album", "Best Rap Song", "Best Rap Album", "Best Jazz Vocal Album", "Best Jazz Instrumental Album", "Best Large Jazz Ensemble Album", "Best Latin Jazz Album", "Best Alternative Jazz Album", "Best Traditional Pop Vocal Album", "Best Contemporary Instrumental Album", "Best Country Song", "Best Country Album", "Best American Roots Song", "Best Americana Album", "Best Bluegrass Album", "Best Traditional Blues Album", "Best Contemporary Blues Album", "Best Folk Album", "Best Regional Roots Music Album", "Best Gospel Performance/Song", "Best Contemporary Christian Music Performance/Song", "Best Gospel Album", "Best Contemporary Christian Music Album", "Best Roots Gospel Album", "Best Latin Pop Album", "Best Música Urbana Album", "Best Latin Rock or Alternative Album", "Best Música Mexicana Album (Including Tejano)", "Best Tropical Latin Album", "Best Global Music Album", "Best Reggae Album", "Best New Age, Ambient, or Chant Album", "Best Children's Music Album", "Best Comedy Album", "Best Compilation Soundtrack For Visual Media", "Best Score Soundtrack For Visual Media (Includes Film And Television)", "Best Score Soundtrack for Video Games and Other Interactive Media", "Best Song Written For Visual Media", "Best Historical Album", "Best Engineered Album, Non-Classical", "Best Engineered Album, Classical", "Best Remixed Recording", "Best Immersive Audio Album", "Best Instrumental Composition", "Best Opera Recording", "Best Classical Instrumental Solo", "Best Classical Solo Vocal Album"]
     #print("Using List:", len(using_list))
 
 
@@ -57,7 +59,6 @@ def retrieve_categories(html_file):
             used_list.append(categories[index])
             which_type = "UNDEF"
             if(re.findall('Album', categories[index]) or re.findall('Soundtrack', categories[index])): which_type = "album"
-            elif(re.findall('Artist', categories[index])): which_type = "artist"
             elif(re.findall('Record', categories[index]) or re.findall('Song', categories[index]) or re.findall('Instrumental', categories[index])): which_type = "track"
             blocks[categories[index]] = { "search_type": which_type, "winner": winners[index], "nominees": nominees[index] }
     # print("IN OUR LIST BUT NOT FOUND")
@@ -189,70 +190,137 @@ def query_api(data, token, type, ids):
     
 
 def calculate_popularity(data):
-    """Calculate relative popularity"""
+    """Calculate relative popularity based on the maximum popularity in each category."""
     popularity_data = {}
     for category, category_dict in data.items():
-        total_popularity = data[category]["winner_popularity"]
-        for nominee_popularity in data[category]["nominee_popularity"]:
-            total_popularity += nominee_popularity
+        max_popularity = max(category_dict["winner_popularity"], max(category_dict["nominee_popularity"]))
+        #print(max_popularity)
+        winner_score = category_dict["winner_popularity"] / max_popularity * 100
         nominees = []
-        for nominee_popularity in data[category]["nominee_popularity"]:
-            nominees.append(nominee_popularity / total_popularity)
-        popularity_data[category] = {"winner_score": data[category]["winner_popularity"] / total_popularity,
-                                     "winner_genres": data[category]["winner_genres"],
-                                     "nominee_scores": nominees, 
-                                     "nominee_genres": data[category]["winner_genres"]
-                                    }
+        for nominee_popularity in category_dict["nominee_popularity"]:
+            relative_popularity = nominee_popularity / max_popularity * 100
+            nominees.append(relative_popularity)
+        popularity_data[category] = {
+            "winner_score": winner_score,
+            "nominee_scores": nominees
+        }
     return popularity_data
 
+def make_charts():
+    with open('data/popularity_data.json', 'r') as file:
+        data = json.load(file)
+
+    popularity_data = calculate_popularity(data)
+
+    bar_chart('track', data, popularity_data)
+    bar_chart('album', data, popularity_data)
+    pie_chart(data)
+
+def bar_chart(category_type, data, popularity_data):
+    labels = []
+    values = []
+    colors = []
+    winner_scores = []
+    nominee_scores = []
+    for category, details in data.items():
+        if details['search_type'] == category_type:
+            relative_popularity = popularity_data[category]
+            winner_scores.append(relative_popularity['winner_score'])
+            nominee_scores.extend(relative_popularity['nominee_scores'])
+            labels.append(details['winner'])
+            values.append(relative_popularity['winner_score'])
+            colors.append('gold')
+            for nominee, score in zip(details['nominees'], relative_popularity['nominee_scores']):
+                labels.append(nominee)
+                values.append(score)
+                colors.append('gray')
+    sorted_indices = np.argsort(values)
+    sorted_labels = [f'{category_type} {i+1}' for i in range(len(labels))]
+    sorted_values = [values[i] for i in sorted_indices]
+    sorted_colors = [colors[i] for i in sorted_indices]
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    ax.bar(range(len(sorted_labels)), sorted_values, color=sorted_colors)
+    ax.set_xticks([])
+    ax.set_xlabel(category_type.capitalize() + 's')
+    ax.set_ylabel('Relative Popularity')
+    ax.set_title(f'Relative Popularity of {category_type.capitalize()}s')
+
+    avg_winner_score = np.mean(winner_scores)
+    avg_nominee_score = np.mean(nominee_scores)
+    scores_box = f'Avg Winner: {avg_winner_score:.2f}%\nAvg Nominee: {avg_nominee_score:.2f}%'
+    ax.text(0.02, 0.95, scores_box, transform=ax.transAxes, fontsize=12,
+            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+
+    from matplotlib.patches import Patch
+    legend_elements = [Patch(facecolor='gold', label='Winner'),
+                       Patch(facecolor='gray', label='Nominee')]
+    ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(0.01, .85))
+
+    plt.show()
+
+def pie_chart(data):
+    total_winners = 0
+    total_nominees = 0
+    most_popular_winners = 0
+    most_popular_nominees = 0
+
+    for category, details in data.items():
+        total_winners += 1
+        total_nominees += len(details['nominee_popularity'])
+        max_popularity = max(details['winner_popularity'], max(details['nominee_popularity']))
+        if details['winner_popularity'] == max_popularity:
+            most_popular_winners += 1
+        else:
+            most_popular_nominees += 1
+
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+    labels = ['Total Winners', 'Total Nominees']
+    sizes = [total_winners, total_nominees]
+    colors = ['gold', 'gray']
+    ax[0].pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+    ax[0].set_title('Total Winners vs. Total Nominees')
+
+    labels = ['Most Popular Winners', 'Most Popular Nominees']
+    sizes = [most_popular_winners, most_popular_nominees]
+    colors = ['gold', 'gray']
+    ax[1].pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+    ax[1].set_title('Most Popular Winners vs. Most Popular Nominees')
+
+    plt.show()
 
 def main():
-    data = retrieve_categories("grammys.html")
-    # print(data)
-    # for datum in data:
-    #     print(datum)
-    #     print("\tWinner:")
-    #     print("\t\t", data[datum]["winner"])
-    #     print("\tNominees:")
-    #     for nom in data[datum]["nominees"]: print("\t\t", nom)
-    # print(data)
-    token = set_token("access_token.txt")
-    # create_database("grammys.sqlite3", data)
-    # find_ids(data, token)
-    # with open('data.json', 'w') as file:
-    #     json.dump(data, file)
-    with open('data/data.json', 'r') as file:
-        # print(file.read())
-        data = json.load(file)
-        database(data)
-        # print(data)
-    # conn = sqlite3.connect("grammys.sqlite3")
-    # cur = conn.cursor()
-    # cur.execute('SELECT * FROM Categories')
-    # for row in cur:
-    #     print(row)
-    for category, category_dict in data.items():
-        print(category)
-        query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
-        query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
-    
-    conn = sqlite3.connect("grammys.sqlite3")
-    cur = conn.cursor()
-    cur.execute('SELECT * FROM Tracks')
-    for row in cur:
-        print(row)
-    cur.execute('SELECT * FROM Albums')
-    for row in cur:
-        print(row)
-    # with open('popularity_data.json', 'w') as file:
-    #     json.dump(data, file)
+    # data = retrieve_categories("grammys.html")
+    # # print(data)
+    # # for datum in data:
+    # #     print(datum)
+    # #     print("\tWinner:")
+    # #     print("\t\t", data[datum]["winner"])
+    # #     print("\tNominees:")
+    # #     for nom in data[datum]["nominees"]: print("\t\t", nom)
+    # # print(data)
+    # token = set_token("access_token.txt")
+    # # find_ids(data, token)
+    # # with open('data.json', 'w') as file:
+    # #     json.dump(data, file)
+    # # with open('data/data.json', 'r') as file:
+    # #     # print(file.read())
+    # #     data = json.load(file)
+    # #     # print(data)
+    # # for category, category_dict in data.items():
+    # #     print(category)
+    # #     query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
+    # #     query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
+    # # with open('popularity_data.json', 'w') as file:
+    # #     json.dump(data, file)
 
-
-    # Calculate relative popularity 
+    # # Calculate relative popularity 
     # with open('data/popularity_data.json', 'r') as file:
     #     # print(file.read())
     #     data = json.load(file)
     # popularity_data = calculate_popularity(data)
     # print(popularity_data)
+    make_charts()
+
 
 main()
