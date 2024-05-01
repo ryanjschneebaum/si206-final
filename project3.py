@@ -86,7 +86,6 @@ def set_token(filename):
         # print(token_json['access_token'])
         return token_json['access_token']
 
-
 def search(category_data, token, name, type):
     # if type == "track":
     url = f'https://api.spotify.com/v1/search?q={name}&type={type}&limit=1'
@@ -117,11 +116,10 @@ def search(category_data, token, name, type):
         nominee_ids.append(response_dict[f"{type}s"]["items"][0]["id"])
     category_data["nominee_ids"] = nominee_ids
 
-
 def find_ids(data, token):
     """"""
-    conn = sqlite3.connect("grammys.sqlite3")
-    cur = conn.cursor()
+    # conn = sqlite3.connect("grammys.sqlite3")
+    # cur = conn.cursor()
     for category, category_data in data.items():
         name = category_data["winner"]
         type = category_data["search_type"]
@@ -133,8 +131,8 @@ def find_ids(data, token):
             # cur.execute('INSERT INTO Categories (name, spotify_id) VALUES (?, ?)', (name, id))
 
 
-def make_database_categories(data):
-    conn = sqlite3.connect("grammys.sqlite3")
+def make_database_categories(data, filename):
+    conn = sqlite3.connect(filename)
     cur = conn.cursor()
     for category, category_data in data.items():
         name = category_data["winner"]
@@ -147,9 +145,9 @@ def make_database_categories(data):
     conn.close()
 
 
-def insert_data(type, id, name, popularity):
+def insert_data(type, id, name, popularity, filename):
     # print(id, name, popularity)
-    conn = sqlite3.connect("grammys.sqlite3")
+    conn = sqlite3.connect(filename)
     cur = conn.cursor()
     if type == "track":
         cur.execute('INSERT OR IGNORE INTO Tracks (id, name, popularity) VALUES (?, ?, ?)', (id, name, popularity))
@@ -158,7 +156,7 @@ def insert_data(type, id, name, popularity):
     conn.commit()
     conn.close()
 
-def query_api(data, token, type, ids):
+def query_api(data, token, type, ids, filename):
     ""
     if isinstance(ids, str):
         url = f"https://api.spotify.com/v1/{type}s?ids={ids}"
@@ -171,7 +169,7 @@ def query_api(data, token, type, ids):
             response_dict = json.loads(response.text)
             # print(response_dict)
             data["winner_popularity"] = response_dict[f"{type}s"][0]["popularity"]
-            insert_data(type, ids, data["winner_id"], data["winner_popularity"])
+            insert_data(type, ids, data["winner_id"], data["winner_popularity"], filename)
     else:
         url = f"https://api.spotify.com/v1/{type}s?ids={','.join(str(x) for x in ids)}"
         response = requests.get(url, 
@@ -185,9 +183,19 @@ def query_api(data, token, type, ids):
             for i in range(0, len(response_dict[f"{type}s"])):
                 popularity = response_dict[f"{type}s"][i]["popularity"]
                 data["nominee_popularity"].append(popularity)
-                insert_data(type, data["nominee_ids"][i], data["nominees"][i], popularity)
+                insert_data(type, data["nominee_ids"][i], data["nominees"][i], popularity, filename)
             print(data)
-    
+
+def meta_database_stuff(filename):
+    data = retrieve_categories("grammys.html")
+    token = set_token("access_token.txt")
+    create_database(filename)
+    find_ids(data, token)
+    make_database_categories(data, filename)
+    for category, category_dict in data.items():
+        query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"], filename)
+        query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"], filename)
+
 
 def calculate_popularity(data):
     """Calculate relative popularity based on the maximum popularity in each category."""
@@ -206,44 +214,51 @@ def calculate_popularity(data):
         }
     return popularity_data
 
-def make_charts():
+def make_charts(filename):
     with open('data/popularity_data.json', 'r') as file:
         data = json.load(file)
 
-    conn = sqlite3.connect("grammys.sqlite3")
+    merged_data = {}
+
+    conn = sqlite3.connect(filename)
     cur = conn.cursor()
     cur.execute("SELECT category, Categories.name, spotify_id, popularity FROM Categories INNER JOIN Tracks ON Categories.spotify_id = Tracks.id")
     track_data = {}
     for row in cur:
-        print(row)
-    cur.execute("SELECT category, Categories.name, spotify_id, popularity FROM Categories INNER JOIN Albums ON Categories.spotify_id = Albums.id")
-        print("row:", row)
+        #print("row:", row)
         if(row[0] not in track_data): # if winner
             #print(row[0], "not in track_data ; new track =", row[1])
+            merged_data[row[0]] = { "winner": row[1], "winner_popularity": row[3], "nominees": [], "nominee_popularity": [] }
             track_data[row[0]] = { "winner": row[1], "winner_popularity": row[3], "nominees": [], "nominee_popularity": [] }
         else: # if nominee
             #print(row[0], "in track_data ; new track =", row[1])
+            merged_data[row[0]]["nominees"].append(row[1])
+            merged_data[row[0]]["nominee_popularity"].append(row[3])
             track_data[row[0]]["nominees"].append(row[1])
             track_data[row[0]]["nominee_popularity"].append(row[3])
-        # print("Category Data: ")
-        # print(track_data[row[0]])
-    # print(track_data["Record Of The Year"])
-    # print()
-    # print(track_data["Song Of The Year"])
-    # print()
 
-    # for cat in track_data:
-    #     print(cat)
-    #     print("\tWinner:")
-    #     print("\t\t", track_data[cat]["winner"])
-    #     print("\tNominees:")
-    #     for nom in track_data[cat]["nominees"]: print("\t\t", nom)
+    cur.execute("SELECT category, Categories.name, spotify_id, popularity FROM Categories INNER JOIN Albums ON Categories.spotify_id = Albums.id")
 
-    popularity_data = calculate_popularity(data)
+    album_data = {}
+    for row in cur:
+        #print("row:", row)
+        if(row[0] not in album_data): # if winner
+            #print(row[0], "not in track_data ; new track =", row[1])
+            merged_data[row[0]] = { "winner": row[1], "winner_popularity": row[3], "nominees": [], "nominee_popularity": [] }
+            album_data[row[0]] = { "winner": row[1], "winner_popularity": row[3], "nominees": [], "nominee_popularity": [] }
+        else: # if nominee
+            #print(row[0], "in track_data ; new track =", row[1])
+            merged_data[row[0]]["nominees"].append(row[1])
+            merged_data[row[0]]["nominee_popularity"].append(row[3])
+            album_data[row[0]]["nominees"].append(row[1])
+            album_data[row[0]]["nominee_popularity"].append(row[3])
 
-    bar_chart('track', data, popularity_data)
-    bar_chart('album', data, popularity_data)
-    pie_chart(data)
+    track_popularity_data = calculate_popularity(track_data)
+    album_popularity_data = calculate_popularity(album_data)
+
+    bar_chart('track', track_data, track_popularity_data)
+    bar_chart('album', album_data, album_popularity_data)
+    pie_chart(merged_data)
 
 def bar_chart(category_type, data, popularity_data):
     labels = []
@@ -252,17 +267,17 @@ def bar_chart(category_type, data, popularity_data):
     winner_scores = []
     nominee_scores = []
     for category, details in data.items():
-        if details['search_type'] == category_type:
-            relative_popularity = popularity_data[category]
-            winner_scores.append(relative_popularity['winner_score'])
-            nominee_scores.extend(relative_popularity['nominee_scores'])
-            labels.append(details['winner'])
-            values.append(relative_popularity['winner_score'])
-            colors.append('gold')
-            for nominee, score in zip(details['nominees'], relative_popularity['nominee_scores']):
-                labels.append(nominee)
-                values.append(score)
-                colors.append('gray')
+        #if details['search_type'] == category_type:
+        relative_popularity = popularity_data[category]
+        winner_scores.append(relative_popularity['winner_score'])
+        nominee_scores.extend(relative_popularity['nominee_scores'])
+        labels.append(details['winner'])
+        values.append(relative_popularity['winner_score'])
+        colors.append('gold')
+        for nominee, score in zip(details['nominees'], relative_popularity['nominee_scores']):
+            labels.append(nominee)
+            values.append(score)
+            colors.append('gray')
     sorted_indices = np.argsort(values)
     sorted_labels = [f'{category_type} {i+1}' for i in range(len(labels))]
     sorted_values = [values[i] for i in sorted_indices]
@@ -276,7 +291,10 @@ def bar_chart(category_type, data, popularity_data):
     ax.set_title(f'Relative Popularity of {category_type.capitalize()}s')
 
     avg_winner_score = np.mean(winner_scores)
+    print(winner_scores)
+    print
     avg_nominee_score = np.mean(nominee_scores)
+    print(nominee_scores)
     scores_box = f'Avg Winner: {avg_winner_score:.2f}%\nAvg Nominee: {avg_nominee_score:.2f}%'
     ax.text(0.02, 0.95, scores_box, transform=ax.transAxes, fontsize=12,
             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
@@ -319,7 +337,7 @@ def pie_chart(data):
     plt.show()
 
 def main():
-    data = retrieve_categories("grammys.html")
+    # data = retrieve_categories("grammys.html")
     # # print(data)
     # # for datum in data:
     # #     print(datum)
@@ -328,7 +346,7 @@ def main():
     # #     print("\tNominees:")
     # #     for nom in data[datum]["nominees"]: print("\t\t", nom)
     # # print(data)
-    token = set_token("access_token.txt")
+    # token = set_token("access_token.txt")
 
     # Search for IDs
     # create_database("grammys.sqlite3")
@@ -337,16 +355,16 @@ def main():
     # with open('data.json', 'w') as file:
     #     json.dump(data, file)
 
-    with open('data/data.json', 'r') as file:
-        # print(file.read())
-        data = json.load(file)
-        # print(data)
-    for category, category_dict in data.items():
-        print(category)
-        query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
-        query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
-    with open('popularity_data.json', 'w') as file:
-        json.dump(data, file)
+    # with open('data/data.json', 'r') as file:
+    #     # print(file.read())
+    #     data = json.load(file)
+    #     # print(data)
+    # for category, category_dict in data.items():
+    #     print(category)
+    #     query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"])
+    #     query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"])
+    # with open('popularity_data.json', 'w') as file:
+    #     json.dump(data, file)
 
     # # Calculate relative popularity 
     # with open('data/popularity_data.json', 'r') as file:
@@ -355,6 +373,9 @@ def main():
     # popularity_data = calculate_popularity(data)
     # print(popularity_data)
     # make_charts()
+
+    # make_database_categories()
+    meta_database_stuff("grammys2.sqlite3")
 
 
 main()
