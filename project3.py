@@ -169,7 +169,7 @@ def query_api(data, token, type, ids, filename, ind):
             response_dict = json.loads(response.text)
             # print(response_dict)
             data["winner_popularity"] = response_dict[f"{type}s"][0]["popularity"]
-            insert_data(type, ids, data["winner_id"], data["winner_popularity"], filename)
+            insert_data(type, ids, data["winner"], data["winner_popularity"], filename)
             ind += 1
     else:
         url = f"https://api.spotify.com/v1/{type}s?ids={','.join(str(x) for x in ids)}"
@@ -383,7 +383,7 @@ def main():
     # make_charts()
 
     # make_database_categories()
-    meta_database_stuff("grammys3.sqlite3", 20)
+    meta_database_stuff("PRESENTATION.sqlite3", 50)
 
 
 main()
