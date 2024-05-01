@@ -148,7 +148,7 @@ def database(data):
 
 
 def insert_data(type, id, name, popularity):
-    print(id, name, popularity)
+    # print(id, name, popularity)
     conn = sqlite3.connect("grammys.sqlite3")
     cur = conn.cursor()
     if type == "track":
@@ -167,7 +167,7 @@ def query_api(data, token, type, ids):
         if response.status_code != 200:
             print("error")
         else:
-            print(ids)
+            # print(ids)
             response_dict = json.loads(response.text)
             # print(response_dict)
             data["winner_popularity"] = response_dict[f"{type}s"][0]["popularity"]
@@ -209,6 +209,12 @@ def calculate_popularity(data):
 def make_charts():
     with open('data/popularity_data.json', 'r') as file:
         data = json.load(file)
+
+    conn = sqlite3.connect("grammys.sqlite3")
+    cur = conn.cursor()
+    cur.execute("SELECT category, Categories.name, spotify_id, popularity FROM Categories INNER JOIN Tracks ON Categories.spotify_id = Tracks.id")
+    for row in cur:
+        print(row)
 
     popularity_data = calculate_popularity(data)
 
