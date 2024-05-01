@@ -156,7 +156,7 @@ def insert_data(type, id, name, popularity, filename):
     conn.commit()
     conn.close()
 
-def query_api(data, token, type, ids, filename):
+def query_api(data, token, type, ids, filename, ind):
     ""
     if isinstance(ids, str):
         url = f"https://api.spotify.com/v1/{type}s?ids={ids}"
@@ -170,6 +170,7 @@ def query_api(data, token, type, ids, filename):
             # print(response_dict)
             data["winner_popularity"] = response_dict[f"{type}s"][0]["popularity"]
             insert_data(type, ids, data["winner_id"], data["winner_popularity"], filename)
+            ind += 1
     else:
         url = f"https://api.spotify.com/v1/{type}s?ids={','.join(str(x) for x in ids)}"
         response = requests.get(url, 
@@ -181,10 +182,12 @@ def query_api(data, token, type, ids, filename):
             # print(response_dict)
             data["nominee_popularity"] = []
             for i in range(0, len(response_dict[f"{type}s"])):
+                ind += 1
                 popularity = response_dict[f"{type}s"][i]["popularity"]
                 data["nominee_popularity"].append(popularity)
                 insert_data(type, data["nominee_ids"][i], data["nominees"][i], popularity, filename)
-            print(data)
+            #print(data)
+    return ind
 
 def meta_database_stuff(filename, index):
     data = retrieve_categories("grammys.html")
@@ -194,11 +197,11 @@ def meta_database_stuff(filename, index):
     make_database_categories(data, filename)
     ind = 0
     for category, category_dict in data.items():
-        if ind == index:
+        if ind >= index:
             break
-        query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"], filename)
-        query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"], filename)
-        ind += 1
+        ind = query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"], filename, ind)
+        ind = query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"], filename, ind)
+        
     print(ind)
 
 
@@ -380,7 +383,7 @@ def main():
     # make_charts()
 
     # make_database_categories()
-    meta_database_stuff("grammys2.sqlite3", 20)
+    meta_database_stuff("grammys3.sqlite3", 20)
 
 
 main()
