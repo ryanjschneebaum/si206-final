@@ -186,15 +186,20 @@ def query_api(data, token, type, ids, filename):
                 insert_data(type, data["nominee_ids"][i], data["nominees"][i], popularity, filename)
             print(data)
 
-def meta_database_stuff(filename):
+def meta_database_stuff(filename, index):
     data = retrieve_categories("grammys.html")
     token = set_token("access_token.txt")
     create_database(filename)
     find_ids(data, token)
     make_database_categories(data, filename)
+    ind = 0
     for category, category_dict in data.items():
+        if ind == index:
+            break
         query_api(category_dict, token, category_dict["search_type"], category_dict["winner_id"], filename)
         query_api(category_dict, token, category_dict["search_type"], category_dict["nominee_ids"], filename)
+        ind += 1
+    print(ind)
 
 
 def calculate_popularity(data):
@@ -375,7 +380,7 @@ def main():
     # make_charts()
 
     # make_database_categories()
-    meta_database_stuff("grammys2.sqlite3")
+    meta_database_stuff("grammys2.sqlite3", 20)
 
 
 main()
